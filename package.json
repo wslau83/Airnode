@@ -1,0 +1,19 @@
+{
+  "name": "airnode",
+  "version": "1.0.0",
+  "description": "",
+  "main": "call_api.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "crypto-js": "^4.1.1",
+    "dotenv": "^16.0.0",
+    "node-cron": "^3.0.0",
+    "pg": "^8.7.3",
+    "reconnecting-websocket": "^4.4.0",
+    "ws": "^8.5.0"
+  }
+}

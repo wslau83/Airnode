@@ -1,0 +1,11 @@
+k8sTesting
+
+node_modules
+
+airnode.log
+
+logs
+
+test*.js
+
+.env
