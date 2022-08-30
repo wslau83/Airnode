@@ -1,34 +1,17 @@
-/**
- * Import Logging library
- */
-var log4js = require("log4js");
+import log4js from 'log4js';
+import pkg from 'pg';
+import Web3 from 'web3';
+import CollateralizedLoanGateway from '../contracts/CollateralizedLoanGateway.json';
+import TruffleContract from '@truffle/contract';
+import ReconnectingWebSocket from 'reconnecting-websocket';
+import WS from 'ws';
+
 log4js.configure({
     appenders: { scheduled_job: { type: 'dateFile', pattern: 'yyyy-MM-dd', filename: `../logs/scheduled_job/scheduled_job.log` } },
     categories: { default: { appenders: ['scheduled_job'], level: 'debug' } }
 });
 var logger = log4js.getLogger();
 logger.level = 'debug';
-
-// /**
-//  * Import redis client
-//  */
-// var redis = require('redis');
-
-// /**
-//  * Import API fetching library
-//  */
-// var fetch = require('node-fetch');
-
-// /**
-//  * Import web3.js and ABI of the CollateralizedLoanGateway
-//  * for calling contract function through JSON RPC in runtime
-//  */
-var Web3 = require('web3');
-var CollateralizedLoanGateway = require('../contracts/CollateralizedLoanGateway.json');
-var TruffleContract = require("@truffle/contract");
-
-var ReconnectingWebSocket = require('reconnecting-websocket');
-var WS = require('ws');
 
 const admin = "0x115d602cbbD68104899a81d29d6B5b9B5d3347b7";
 
@@ -71,7 +54,7 @@ const initiateWebsocket = async () => {
     return ws;
 }
 
-const { Client } = require('pg')
+const { Client } = pkg;
 const client = new Client({
     user: process.env.POSTGRES_DATABASE_USERNAME,
     host: process.env.POSTGRES_DATABASE_HOST,
@@ -193,7 +176,7 @@ const handleCheckDefaultedLoan = (req, res) => {
     });
 }
 
-module.exports = {
+export {
     handleCheckLoanLiquidation,
     handleCheckDefaultedLoan,
 };

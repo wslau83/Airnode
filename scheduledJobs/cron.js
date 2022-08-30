@@ -1,10 +1,10 @@
-var cron = require('node-cron');
+import cron from 'node-cron';
 
-var {fulfillFiatTransferredRequest} = require('./check_bank_transfer');
-var {checkDefaultedLoan} = require('./check_defaulted_loan');
-var {checkLoanLiquidation} = require('./check_liquidated_loan');
-var {eventLogReading} = require('./event_log_reading');
-var {adminLogin} = require('./update_admin_token');
+import {fulfillFiatTransferredRequest} from './check_bank_transfer.js';
+import {checkDefaultedLoan} from './check_defaulted_loan.js';
+import {checkLoanLiquidation} from './check_liquidated_loan.js';
+import {eventLogReading} from './event_log_reading.js';
+import {adminLogin} from './update_admin_token.js';
 
 //execute every 30 sec
 cron.schedule('*/30 * * * * *', function(){
@@ -13,7 +13,7 @@ cron.schedule('*/30 * * * * *', function(){
 });
 
 //execute every 5 min
-cron.schedule('* */5 * * * *', function(){
+cron.schedule('*/5 * * * *', function(){
     console.log(`adminLogin: Running every 5 min at ${new Date()}`);
     adminLogin();
 });
@@ -30,8 +30,8 @@ cron.schedule('* */5 * * * *', function(){
     checkLoanLiquidation();
 });
 
-//execute every 15 min
-cron.schedule('* */15 * * * *', function(){
-    console.log(`eventLogReading: Running every 15 min at ${new Date()}`);
+//execute every 15 sec
+cron.schedule('*/15 * * * * *', function(){
+    console.log(`eventLogReading: Running every 15 sec at ${new Date()}`);
     eventLogReading();
 });

@@ -9,3 +9,5 @@ logs
 test*.js
 
 .env
+
+.DS_Store

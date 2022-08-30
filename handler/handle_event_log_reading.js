@@ -1,120 +1,28 @@
-/**
- * Import Logging library
- */
-var log4js = require("log4js");
-log4js.configure({
-    appenders: { event_log_reading: { type: 'dateFile', pattern: 'yyyy-MM-dd', filename: `../logs/event_log_reading/event_log_reading.log` } },
-    categories: { default: { appenders: ['event_log_reading'], level: 'debug' } }
-});
-var logger = log4js.getLogger();
-logger.level = 'debug';
- 
- /**
-  * Import redis client
-  */
-var redis = require('redis');
- 
- /**
-  * Import web3.js and ABI of the CollateralizedLoanGateway
-  * for calling contract function through JSON RPC in runtime
-  */
-var Web3 = require('web3');
-var CollateralizedLoanGateway = require('../contracts/CollateralizedLoanGateway.json');
-var TruffleContract = require("@truffle/contract");
+import redis from 'redis';
+import Web3 from 'web3';
+import pkg from 'pg';
+import log4js from 'log4js';
+import CollateralizedLoanGateway from '../contracts/CollateralizedLoanGateway.json';
+import TruffleContract from '@truffle/contract';
+import { queryDB } from '../util/db_call.js';
+import {
+    createInitiatedLoanQuery,
+    updateLoanRequestedQuery,
+    updateLoanCancelledQuery,
+    updateLoanDisbursedQuery,
+    updateLoanRepaidQuery,
+    updateLoanDefaultedQuery,
+    updateLoanFullyRepaidQuery
+} from '../util/sql_query.js';
 
-const { Client } = require('pg')
-const client = new Client({
-    user: process.env.POSTGRES_DATABASE_USERNAME,
-    host: process.env.POSTGRES_DATABASE_HOST,
-    database: process.env.POSTGRES_DATABASE_DATABASENAME,
-    password: process.env.POSTGRES_DATABASE_PWD,
-    port: process.env.POSTGRES_DATABASE_PORT,
-    ssl: {
-        rejectUnauthorized: false
-    }
-})
-client.connect()
-
-let createInitiatedLoanQuery = {
-    text: ' \
-        INSERT INTO COLLATERALIZED_LOAN \
-        (LOAN_ID, LOAN_AMOUNT, COLLATERAL_AMOUNT, LENDER, LOAN_STATUS_CODE, LOAN_TERM, APR, REPAYMENT_SCHEDULE, MONTHLY_REPAYMENT_AMOUNT, REMAINING_REPAYMENT_COUNT, INITIAL_LTV, MARGIN_LTV, LIQUIDATION_LTV, CREATE_TIME, LAST_UPDATE_TIME) \
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TO_TIMESTAMP($14), TO_TIMESTAMP($15)) \
-    ',
-}
-
-let updateLoanRequestedQuery = {
-    text: ' \
-        UPDATE COLLATERALIZED_LOAN cl \
-        SET LOAN_STATUS_CODE = (SELECT LOAN_STATUS_CODE FROM COLLATERALIZED_LOAN_STATUS WHERE LOAN_STATUS_DESC = \'LoanRequested\'), \
-        BORROWER = $1, \
-        LAST_UPDATE_TIME = TO_TIMESTAMP($2) \
-        WHERE cl.LOAN_ID = $3 \
-        AND cl.LOAN_STATUS_CODE = (SELECT LOAN_STATUS_CODE FROM COLLATERALIZED_LOAN_STATUS WHERE LOAN_STATUS_DESC = \'LoanInitiated\') \
-    ',
-}
-
-let updateLoanCancelledQuery = {
-    text: ' \
-        UPDATE COLLATERALIZED_LOAN cl \
-        SET LOAN_STATUS_CODE = (SELECT LOAN_STATUS_CODE FROM COLLATERALIZED_LOAN_STATUS WHERE LOAN_STATUS_DESC = \'LoanCancelled\'), \
-        LAST_UPDATE_TIME = TO_TIMESTAMP($1) \
-        WHERE cl.LOAN_ID = $2 \
-        AND cl.LENDER = $3 \
-        AND cl.LOAN_STATUS_CODE <= (SELECT LOAN_STATUS_CODE FROM COLLATERALIZED_LOAN_STATUS WHERE LOAN_STATUS_DESC = \'LoanRequested\') \
-    ',
-}
-
-let updateLoanDisbursedQuery = {
-    text: ' \
-        UPDATE COLLATERALIZED_LOAN cl \
-        SET LOAN_STATUS_CODE = (SELECT LOAN_STATUS_CODE FROM COLLATERALIZED_LOAN_STATUS WHERE LOAN_STATUS_DESC = \'LoanRepaying\'), \
-        NEXT_REPAYMENT_DEADLINE = TO_TIMESTAMP($1), \
-        LAST_UPDATE_TIME = TO_TIMESTAMP($2) \
-        WHERE cl.LOAN_ID = $3 \
-        AND cl.LENDER = $4 \
-        AND cl.LOAN_STATUS_CODE = (SELECT LOAN_STATUS_CODE FROM COLLATERALIZED_LOAN_STATUS WHERE LOAN_STATUS_DESC = \'LoanRequested\') \
-    ',
-}
-
-let updateLoanRepaidQuery = {
-    text: ' \
-        UPDATE COLLATERALIZED_LOAN cl \
-        SET REMAINING_REPAYMENT_COUNT = REMAINING_REPAYMENT_COUNT - 1, \
-        LAST_UPDATE_TIME = TO_TIMESTAMP($1) \
-        WHERE cl.LOAN_ID = $2 \
-        AND cl.LENDER = $3 \
-        AND cl.LOAN_STATUS_CODE = (SELECT LOAN_STATUS_CODE FROM COLLATERALIZED_LOAN_STATUS WHERE LOAN_STATUS_DESC = \'LoanRepaying\') \
-    ',
-}
-
-let updateLoanDefaultedQuery = {
-    text: ' \
-        UPDATE COLLATERALIZED_LOAN cl \
-        SET LOAN_STATUS_CODE = (SELECT LOAN_STATUS_CODE FROM COLLATERALIZED_LOAN_STATUS WHERE LOAN_STATUS_DESC = \'LoanDefaulted\'), \
-        NEXT_REPAYMENT_DEADLINE = NULL, \
-        LAST_UPDATE_TIME = TO_TIMESTAMP($1) \
-        WHERE cl.LOAN_ID = $2 \
-        AND cl.LENDER = $3 \
-        AND cl.LOAN_STATUS_CODE = (SELECT LOAN_STATUS_CODE FROM COLLATERALIZED_LOAN_STATUS WHERE LOAN_STATUS_DESC = \'LoanRepaying\') \
-    ',
-}
-
-let updateLoanFullyRepaidQuery = {
-    text: ' \
-        UPDATE COLLATERALIZED_LOAN cl \
-        SET LOAN_STATUS_CODE = (SELECT LOAN_STATUS_CODE FROM COLLATERALIZED_LOAN_STATUS WHERE LOAN_STATUS_DESC = \'LoanCompleted\'), \
-        REMAINING_REPAYMENT_COUNT = REMAINING_REPAYMENT_COUNT - 1, \
-        NEXT_REPAYMENT_DEADLINE = NULL, \
-        LAST_UPDATE_TIME = TO_TIMESTAMP($1) \
-        WHERE cl.LOAN_ID = $2 \
-        AND cl.BORROWER = $3 \
-        AND cl.LOAN_STATUS_CODE = (SELECT LOAN_STATUS_CODE FROM COLLATERALIZED_LOAN_STATUS WHERE LOAN_STATUS_DESC = \'LoanRepaying\') \
-    ',
-}
+const loggerName = 'event_log_reading';
+const redisPort = getEnvVar('REDIS_PORT');
+const redisHost = getEnvVar('REDIS_HOST');
 
 const handleInsertOrUpdateLoan = (caller, topic, eventKeys, query) => {
-    const redisClient = redis.createClient(6379, '127.0.0.1');
+    var logger = getLogger(loggerName);
+
+    const redisClient = redis.createClient(redisPort, redisHost);
 
     let web3 = new Web3();
     let collateralizedLoanGateway = TruffleContract(CollateralizedLoanGateway);
@@ -180,20 +88,19 @@ const handleInsertOrUpdateLoan = (caller, topic, eventKeys, query) => {
 
                                 if(parseInt(loanId) !== 0) {
                                     if(!err) {
-                                        client.query(query, sqlParams, (err, data) => {
-                                            if(data) {
-                                                logger.debug(data.rows)
-            
-                                                logger.info(`${topic} at block ${event.blockNumber}: Successfully executed for loanId ${loanId}`);
-                                                // res.status(200).send(data.rows);
-                                            } else {
-                                                logger.debug(err)
-                                                // res.status(500).json({"error": "internal server error"});
-            
-                                                logger.error(`${topic} at block ${event.blockNumber}: Failed to execute for loanId ${loanId}`);
-                                            }
+                                        queryDB(query, sqlParams)
+                                        .then(data => {
+                                            logger.debug(data.rows)
+        
+                                            logger.info(`${topic} at block ${event.blockNumber}: Successfully executed for loanId ${loanId}`);
+                                            // res.status(200).send(data.rows);
                                         })
+                                        .catch(err => {
+                                            logger.debug(err)
+                                            // res.status(500).json({"error": "internal server error"});
             
+                                            logger.error(`${topic} at block ${event.blockNumber}: Failed to execute for loanId ${loanId}`);
+                                        })
                                     } else {
                                         logger.debug(err);
                                         logger.error(`${topic} at block ${event.blockNumber}: Error occurred on the side of CollateralizedLoanGateway for loanId ${loanId}`);
@@ -223,20 +130,19 @@ const handleInsertOrUpdateLoan = (caller, topic, eventKeys, query) => {
 
                     if(loanId && parseInt(loanId) !== 0) {
                         if(!err) {
-                            client.query(query, sqlParams, (err, data) => {
-                                if(data) {
-                                    logger.debug(data.rows)
+                            queryDB(query, sqlParams)
+                            .then(data => {
+                                logger.debug(data.rows)
 
-                                    logger.info(`${topic} at block ${event.blockNumber}: Successfully executed for loanId ${loanId}`);
-                                    // res.status(200).send(data.rows);
-                                } else {
-                                    logger.debug(err)
-                                    // res.status(500).json({"error": "internal server error"});
-
-                                    logger.error(`${topic} at block ${event.blockNumber}: Failed to execute for loanId ${loanId}`);
-                                }
+                                logger.info(`${topic} at block ${event.blockNumber}: Successfully executed for loanId ${loanId}`);
+                                // res.status(200).send(data.rows);
                             })
+                            .catch(err => {
+                                logger.debug(err)
+                                // res.status(500).json({"error": "internal server error"});
 
+                                logger.error(`${topic} at block ${event.blockNumber}: Failed to execute for loanId ${loanId}`);
+                            })
                         } else {
                             logger.debug(err);
                             logger.error(`${topic} at block ${event.blockNumber}: Error occurred on the side of CollateralizedLoanGateway`);
@@ -351,7 +257,7 @@ const handleGetLoanFullyRepaid = () => {
     handleInsertOrUpdateLoan(caller, topic, eventKeys, query);
 }
 
-module.exports = {
+export {
     handleGetLoanInitiated,
     handleGetLoanRequested,
     handleGetLoanCancelled,

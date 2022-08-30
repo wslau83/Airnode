@@ -1,13 +1,13 @@
-const express = require('express');
+import express from 'express';
+import cors from 'cors';
+import moment from 'moment';
+import bank_transfer from './bank_transfer.js';
+import search_loan from './search_loan.js';
 
-const bank_transfer = require('./bank_transfer');
-const search_loan = require('./search_loan');
-const logger = require('./logger');
-
-var cors = require('cors');
 const app = express();
 
-var allowedOrigins = ['http://localhost:3000'];
+const allowedOrigins = ['http://localhost:3000'];
+const port = 8082;
 
 app.use(cors({
     origin: function(origin, callback){
@@ -23,9 +23,6 @@ app.use(cors({
     }
 }));
 
-const port = 8082;
-
-// app.use(logger.connect);
 app.use('/bankTransfer', bank_transfer);
 app.use('/searchLoan', search_loan);
 
@@ -34,14 +31,19 @@ app.use((err, req, res, next) => {
     success: false,
     message: err.message || 'An error occured.',
     errors: err.error || [],
+    time: moment().format('yyyy-MM-DDTHH:mm:ssZ')
   });
 });
 
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: 'Resource not found.' });
+  res.status(404).json({
+    success: false,
+    message: 'Resource not found.',
+    time: moment().format('yyyy-MM-DDTHH:mm:ssZ')
+  });
 });
 
 // Start the server
 app.listen(port);
 
-console.log(`Listening on port ${port}...`);
+console.log(`Server started on ${port}...`);

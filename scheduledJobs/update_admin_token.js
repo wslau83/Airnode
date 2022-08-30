@@ -1,30 +1,25 @@
-/**
- * Import redis client
- */
-var redis = require('redis');
+import redis from 'redis';
+import fetch from 'node-fetch';
+import getEnvVar from '../util/get_env_var.js';
+import getLogger from '../util/logger.js';
 
-/**
- * Import API fetching library
- */
-var fetch = require('node-fetch');
+const openApiHost = getEnvVar('OPEN_API_HOST');
+const ainodeAdminAPILoginAccount = getEnvVar('AIRNODE_ADMIN_API_LOGIN_ACCOUNT');
+const ainodeAdminAPILoginPassword = getEnvVar('AIRNODE_ADMIN_API_LOGIN_PASSWORD');
+const redisPort = getEnvVar('REDIS_PORT');
+const redisHost = getEnvVar('REDIS_HOST');
 
-const is_testing = false;
-let openApiHost = 'localhost:8080';
-if(!is_testing)
-    openApiHost = 'bank-open-api.herokuapp.com';
+const loggerName = 'update_admin_token';
 
-const Logger = require('./logger');
 const handleAdminLogin = () => {
-    require('dotenv').config({path: '../.env'});
-    let logger = Logger.update_admin_token;
-    // logger.info('testing1234');
+    var logger = getLogger(loggerName);
 
-    const redisClient = redis.createClient(6379, '127.0.0.1');
+    const redisClient = redis.createClient(redisPort, redisHost);
 
     // Username and password have to be provided by the user
     const crendentials = {
-        "username": process.env.AIRNODE_ADMIN_API_LOGIN_ACCOUNT
-        , "password": process.env.AIRNODE_ADMIN_API_LOGIN_PASSWORD
+        "username": ainodeAdminAPILoginAccount
+        , "password": ainodeAdminAPILoginPassword
     };
 
     // Call Open API endpoint POST /api/v1/auth/registry/user/login
@@ -76,8 +71,9 @@ const handleAdminLogin = () => {
 
 const adminLogin = () => {
     /**
-     * Check FiatMoneyTransferredToBank in event logs, frequency: every 5 minutes
+     * Automatically perform admin login in Open API and retrieve admin token, frequency: every 5 minutes
      */
+    var logger = getLogger(loggerName);
     try {
         handleAdminLogin();
     } catch (err) {
@@ -86,6 +82,6 @@ const adminLogin = () => {
     }
 }
 
-module.exports = {
+export {
     adminLogin
 };

@@ -1,35 +1,22 @@
-/**
- * Import redis client
- */
-var redis = require('redis');
+import redis from 'redis';
+import fetch from 'node-fetch';
+import Web3 from 'web3';
+import getEnvVar from '../util/get_env_var.js';
+import CollateralizedLoanGateway from '../contracts/CollateralizedLoanGateway.json';
+import TruffleContract from '@truffle/contract';
+import getLogger from '../util/logger.js';
 
-/**
- * Import API fetching library
- */
-var fetch = require('node-fetch');
+const loggerName = 'check_bank_transfer';
+const admin = getEnvVar('ADMIN_WALLET_ADDRESS');
+const adminBankAccountNo = getEnvVar('ADMIN_ACCOUNT_NO');
+const openApiHost = getEnvVar('OPEN_API_HOST');
+const redisPort = getEnvVar('REDIS_PORT');
+const redisHost = getEnvVar('REDIS_HOST');
 
-/**
- * Import web3.js and ABI of the CollateralizedLoanGateway
- * for calling contract function through JSON RPC in runtime
- */
-var Web3 = require('web3');
-var CollateralizedLoanGateway = require('../contracts/CollateralizedLoanGateway.json');
-var TruffleContract = require("@truffle/contract");
-
-const admin = "0x115d602cbbD68104899a81d29d6B5b9B5d3347b7";
-const adminBankAccountNo = "4020723493878483";
-
-const is_testing = false;
-let openApiHost = 'localhost:8080';
-if(!is_testing)
-    openApiHost = 'bank-open-api.herokuapp.com';
-
-const Logger = require('./logger');
 const handleFulfillFiatTransferredRequest = () => {
-    let logger = Logger.check_bank_transfer;
-    // logger.info('4321testing');
+    var logger = getLogger(loggerName);
     
-    const redisClient = redis.createClient(6379, '127.0.0.1');
+    const redisClient = redis.createClient(redisPort, redisHost);
 
     let web3 = new Web3();
     var collateralizedLoanGateway = TruffleContract(CollateralizedLoanGateway);
@@ -150,7 +137,7 @@ const handleFulfillFiatTransferredRequest = () => {
                                     
                                 });
                             } else {
-                                logger.error(`Fiat transfer to DEX failed when calling Open API for address ${event.returnValues['_address']}, account number ${event.returnValues['_bankAccountNo']} with txnAmount ${event.returnValues['_value']}`);
+                                logger.error(`Fiat transfer to Platform failed when calling Open API for address ${event.returnValues['_address']}, account number ${event.returnValues['_bankAccountNo']} with txnAmount ${event.returnValues['_value']}`);
                                 logger.info('\n-------------------------fulfillFiatTransferredRequest End.-------------------------\n');
                             }
                         }).catch((error) => {
@@ -206,7 +193,7 @@ const fulfillFiatTransferredRequest = () => {
     /**
      * Check FiatMoneyTransferredToBank in event logs, frequency: every 5 minutes
      */
-    let logger = Logger.check_bank_transfer;
+    var logger = getLogger(loggerName);
     try {
         handleFulfillFiatTransferredRequest();
     } catch (err) {
@@ -215,6 +202,6 @@ const fulfillFiatTransferredRequest = () => {
     }
 }
 
-module.exports = {
+export {
     fulfillFiatTransferredRequest
 };

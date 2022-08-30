@@ -1,13 +1,13 @@
-var Web3 = require('web3');
-var CollateralizedLoanGateway = require('../contracts/CollateralizedLoanGateway.json');
-var TruffleContract = require("@truffle/contract");
+import Web3 from 'web3';
+import CollateralizedLoanGateway from '../contracts/CollateralizedLoanGateway.json';
+import TruffleContract from '@truffle/contract';
+import getLogger from '../util/logger.js';
 
-const admin = "0x115d602cbbD68104899a81d29d6B5b9B5d3347b7";
+const loggerName = 'check_defaulted_loan';
+const admin = getEnvVar('ADMIN_WALLET_ADDRESS');
 
-const Logger = require('./logger');
 const handleCheckDefaultedLoan = () => {
-    let logger = Logger.check_defaulted_loan;
-    // logger.info('4321defaulted');
+    var logger = getLogger(loggerName);
     
     var today = new Date();
     let todayDeadline = today.setHours(23,59,59,999);
@@ -37,7 +37,7 @@ const checkDefaultedLoan = () => {
     /**
      * Check loan that defaults, frequency: every EOD
      */
-    let logger = Logger.check_defaulted_loan;
+    var logger = getLogger(loggerName);
     try {
         handleCheckDefaultedLoan();
     } catch (err) {
@@ -46,6 +46,6 @@ const checkDefaultedLoan = () => {
     }
 }
 
-module.exports = {
+export {
     checkDefaultedLoan
 };
